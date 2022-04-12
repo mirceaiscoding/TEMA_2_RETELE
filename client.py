@@ -1,6 +1,7 @@
 from itertools import count
 import socket
 import struct
+from sys import flags
 
 serverAddressPort = ("127.0.0.1", 20001)
 bufferSize = 1024
@@ -57,16 +58,33 @@ def decodeResponse(response):
     seq = struct.unpack(">H", header[:2])[0]
     ack = struct.unpack(">H", header[2:4])[0]
     flags = header[4]
-    print(f"Message from Client: {message}")
+    print(f"Message from server: {message}")
     print (f"Header: seq: {seq}, ack: {ack}, flags: {flags}")
     return message, seq, ack, flags
     
 
 def threeWayHandshake():
+    print("THREE WAY HANDSHAKE")
     seq = next(generator)
+    print("Sendin SYN")
     sendToServer(flags=SYN, seq_number=seq)
-    
     response = getServerResponse()
+    server_message, server_seq, server_ack, server_flags = decodeResponse(response)
+    if server_flags == SYN + ACK:
+        print("Recieved SYN ACK")
+        # check if server sequence is correct
+        if server_seq == seq + 1:
+            # Send ACK+1 to confirm
+            print("Sending to server ACK+1 to verify")
+            sendToServer(flags=ACK, ack_number=server_ack+1)
+        else:
+            print("Server SYN does not match client SYN")
+            return False
+    else:
+        print("Didn't recieve SYN ACK")
+        return False
+    return True
+
     
 # initialize three way handhake
 threeWayHandshake()
