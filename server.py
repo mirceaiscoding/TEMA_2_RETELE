@@ -2,6 +2,7 @@ from itertools import count
 import socket
 import struct
 from sys import flags
+from queue import PriorityQueue
 
 localIP = "127.0.0.1"
 localPort = 20001
@@ -62,6 +63,15 @@ def sendToClient(address, message="", flags=0, seq_number=0, ack_number=0, chunk
 # value = [data]     
 openDataTransfers = {}
 
+def getData(address):
+    packets = openDataTransfers[address]
+    data = ""
+    for (seq, d) in sorted(packets):
+        d = d.decode('utf-8')
+        print(f"{seq}: {d}")
+        data += d
+    return data
+
 # Listen for incoming requests
 while(True):
     
@@ -88,4 +98,32 @@ while(True):
             else:
                 print("Client ACK does not match server ACK")
 
+    if flags == PSH+SEQ:
+        print(f"PUSH DATA: ({seq}, {message})")
+        if address in openDataTransfers.keys():
+            openDataTransfers[address].append((seq, message))
+            print("SEND ACK")
+            server_ack = next(generator)
+            sendToClient(address, seq_number=seq+1, ack_number=server_ack, flags=PSH+ACK)
+        else:
+            print(f"Connection to {address} is not open")
+            
+    if flags == FIN:
+        # Confirm by sending back SEQ+1 and ACK
+        print("FIN Recieved. Confirm by sending SEQ+1 and ACK")
+        server_ack = next(generator)
+        sendToClient(address, flags=FIN+ACK, seq_number=seq+1, ack_number=server_ack)
+    
+        response = UDPServerSocket.recvfrom(bufferSize)[0]
+        client_message, client_seq, client_ack, client_flags = decodeResponse(response)
+        if client_flags == ACK:
+            print("ACK Recieved")
+            if client_ack == server_ack + 1:
+                print(DELIMITER)
+                data = getData(address)
+                print(f"DATA SENT IS {data}")
+                print(f"Close connection to {address}")
+                openDataTransfers.pop(address)
+            else:
+                print("Client ACK does not match server ACK")
     print(DELIMITER)
